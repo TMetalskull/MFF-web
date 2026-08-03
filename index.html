@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MFF Magyar Lexikon - Teljes Meta Premium</title>
+    
+    <!-- GOOGLE ANALYTICS 4 (KÖTELEZŐ: Írd át a G-XXXXXXXXXX kódot a sajátodra!) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-XXXXXXXXXX'); /* <--- IDE JÖN A SAJÁT KÓDOD LÉPÉSEK UTÁN */
+    </script>
+    <!-- ANALITIKA VÉGE -->
+
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@700;900&display=swap" rel="stylesheet">
+   <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <h1>MFF Magyar Lexikon</h1>
+
+    <div id="ragados-fejlec">
+        <button id="hamburger-menu-gomb" class="hamburger-btn">
+            <span></span><span></span><span></span>
+        </button>
+        <div class="kereso-tarolo">
+            <input type="text" id="kereso-mezo" placeholder="🔍 Karakter keresése (Pl. Storm)...">
+            <label class="sajat-raktar-tarolo" title="Csak a sajátként megjelölt karaktereidet mutatja">
+                <input type="checkbox" id="sajat-raktar-toggle">
+                <label for="sajat-raktar-toggle">Csak Sajátok</label>
+            </label>
+        </div>
+        <div class="fejlec-gombok">
+            <button id="grid-mod-gomb" class="mod-toggle-btn aktiv">Lexikon</button>
+            <button id="pvp-mod-gomb" class="mod-toggle-btn">PvP Matchup</button>
+            <button id="tier-list-gomb" class="mod-toggle-btn">Tier List</button>
+            <button id="abx-mod-gomb" class="mod-toggle-btn">Alliance Battle</button>
+            <button id="kartya-meta-gomb" class="mod-toggle-btn">Kártyák</button>
+        </div>
+    </div>
+
+    <!-- SZŰRŐ DRAWER -->
+    <div id="szuro-drawer" class="szuro-drawer">
+        <div class="drawer-fejlec">
+            <h3>Részletes Szűrők</h3>
+            <button id="drawer-bezar-gomb" class="bezar-btn">&times;</button>
+        </div>
+        <div class="drawer-tartalom">
+            <div class="filter-group fg-mode">
+                <h3>Játékmód</h3>
+                <div class="gomb-tarolo">
+                    <button class="filter-btn active" data-category="mode" data-value="all">Összes</button>
+                    <button class="filter-btn" data-category="mode" data-value="pve">PvE</button>
+                    <button class="filter-btn" data-category="mode" data-value="pvp">PvP</button>
+                </div>
+            </div>
+            <div class="filter-group fg-type">
+                <h3>Típus</h3>
+                <div class="gomb-tarolo">
+                    <button class="filter-btn active" data-category="type" data-value="all">Összes</button>
+                    <button class="filter-btn" data-category="type" data-value="combat">Combat</button>
+                    <button class="filter-btn" data-category="type" data-value="blast">Blast</button>
+                    <button class="filter-btn" data-category="type" data-value="speed">Speed</button>
+                    <button class="filter-btn" data-category="type" data-value="universal">Universal</button>
+                </div>
+            </div>
+            <div class="filter-group fg-species">
+                <h3>Faj</h3>
+                <div class="gomb-tarolo">
+                    <button class="filter-btn active" data-category="species" data-value="all">Összes</button>
+                    <button class="filter-btn" data-category="species" data-value="human">Human</button>
+                    <button class="filter-btn" data-category="species" data-value="mutant">Mutant</button>
+                    <button class="filter-btn" data-category="species" data-value="alien">Alien</button>
+                    <button class="filter-btn" data-category="species" data-value="inhuman">Inhuman</button>
+                    <button class="filter-btn" data-category="species" data-value="creature">Creature</button>
+                    <button class="filter-btn" data-category="species" data-value="other">Other</button>
+                </div>
+            </div>
+            <div class="filter-group fg-alignment">
+                <h3>Oldal</h3>
+                <div class="gomb-tarolo">
+                    <button class="filter-btn active" data-category="alignment" data-value="all">Összes</button>
+                    <button class="filter-btn" data-category="alignment" data-value="super hero">Hero</button>
+                    <button class="filter-btn" data-category="alignment" data-value="super villain">Villain</button>
+                </div>
+            </div>
+            <div class="filter-group fg-role">
+                <h3>Szerepkör</h3>
+                <div class="gomb-tarolo">
+                    <button class="filter-btn active" data-category="role" data-value="all">Összes</button>
+                    <button class="filter-btn" data-category="role" data-value="leader">Leader</button>
+                    <button class="filter-btn" data-category="role" data-value="support">Support</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="drawer-overlay" class="drawer-overlay"></div>
+
+    <button id="vissza-a-tetejere" class="scroll-top-btn" title="Vissza a tetejére">▲</button>
+
+    <!-- 1. ALAP NÉZET: GRID -->
+    <div id="karakter-grid"></div>
+
+    <!-- 5. ÚJ NÉZET: DEDIKÁLT KARAKTER ADATLAP (SPA) -->
+    <div id="karakter-reszletek-view" class="rejtett">
+        <div class="vissza-gomb-container">
+            <button id="vissza-a-gridbe-btn" class="vissza-gomb-spa">🡄 Vissza a listához</button>
+        </div>
+        <div class="reszletek-grid" id="reszletek-dinamikus-tartalom">
+            <!-- Ezt a JS tölti fel -->
+        </div>
+    </div>
+
+    <!-- 2. NÉZET: PVP MATCHUP -->
+    <div id="pvp-matchup-view" class="matchup-container rejtett">
+        <div class="matchup-col">
+            <h3 style="color: var(--mff-gold);">PvP Karakter</h3>
+            <div id="pvp-character-list" class="scrollable-list"></div>
+        </div>
+        <div class="matchup-col">
+            <h3 style="color: var(--mff-speed);">Előny</h3>
+            <div id="pvp-strong-list" class="scrollable-list"></div>
+        </div>
+        <div class="matchup-col">
+            <h3 style="color: var(--mff-t4);">Veszély</h3>
+            <div id="pvp-weak-list" class="scrollable-list"></div>
+        </div>
+    </div>
+
+    <!-- 3. NÉZET: TIER LIST -->
+    <div id="tier-list-view" class="tier-list-container rejtett"></div>
+
+    <!-- 4. NÉZET: ALLIANCE BATTLE NÉZET -->
+    <div id="abx-abl-view" class="abx-container rejtett">
+        <div class="mff-tabs-container" style="justify-content: center; display: flex; margin-bottom: 20px;">
+            <div class="mff-tabs" style="border:none;">
+                <button class="mff-tab-btn aktiv" id="tab-btn-abx">ABX Kereső</button>
+                <button class="mff-tab-btn" id="tab-btn-abl">ABL Kereső</button>
+            </div>
+        </div>
+        <!-- ABX -->
+        <div id="abx-section" class="ab-section aktiv">
+            <div class="abx-szurok">
+                <div class="abx-select-group">
+                    <label>ABX Napi Célpont</label>
+                    <select id="abx-napi-select" class="abx-select">
+                        <option value="none">-- Válassz egy ABX feltételt! --</option>
+                        <optgroup label="Általános / Nincs Kötöttség">
+                            <option value="any">Nincs Kötöttség (Bármilyen típus)</option>
+                        </optgroup>
+                        <optgroup label="Combat Napok">
+                            <option value="combat_hero">Combat + Hero</option>
+                            <option value="combat_villain">Combat + Villain</option>
+                        </optgroup>
+                        <optgroup label="Blast Napok">
+                            <option value="blast_male">Blast + Male (Férfi)</option>
+                            <option value="blast_villain">Blast + Villain</option>
+                        </optgroup>
+                        <optgroup label="Speed Napok">
+                            <option value="speed_hero">Speed + Hero</option>
+                            <option value="speed_villain">Speed + Villain</option>
+                        </optgroup>
+                        <optgroup label="Universal Napok">
+                            <option value="universal_hero">Universal + Hero</option>
+                            <option value="universal_villain">Universal + Villain</option>
+                            <option value="universal_female">Universal + Female (Nő)</option>
+                        </optgroup>
+                    </select>
+                </div>
+                <button id="abx-kereso-btn" class="abx-keres-gomb">Keresés</button>
+            </div>
+            <div id="abx-eredmenyek" class="alliance-battle-results">
+                <div class="ab-col dps"><h4>DPS</h4><div class="col-content"></div></div>
+                <div class="ab-col leader"><h4>Leader</h4><div class="col-content"></div></div>
+                <div class="ab-col support"><h4>Support</h4><div class="col-content"></div></div>
+            </div>
+        </div>
+        <!-- ABL -->
+        <div id="abl-section" class="ab-section">
+            <div class="abx-szurok">
+                <div class="abx-select-group">
+                    <label>ABL Napi Célpont</label>
+                    <select id="abl-napi-select" class="abx-select">
+                        <option value="none">-- Válassz egy ABL feltételt! --</option>
+                        <optgroup label="Faj & Típus">
+                            <option value="alien">Alien (Idegen)</option>
+                            <option value="mutant">Mutant (Mutáns)</option>
+                        </optgroup>
+                        <optgroup label="Combat Napok">
+                            <option value="combat_female">Combat + Female (Nő)</option>
+                            <option value="combat_mutant">Combat + Mutant</option>
+                        </optgroup>
+                        <optgroup label="Blast Napok">
+                            <option value="blast_hero">Blast + Hero</option>
+                            <option value="blast_female">Blast + Female (Nő)</option>
+                        </optgroup>
+                        <optgroup label="Speed Napok">
+                            <option value="speed_female">Speed + Female (Nő)</option>
+                        </optgroup>
+                        <optgroup label="Universal Napok">
+                            <option value="universal_male">Universal + Male (Férfi)</option>
+                        </optgroup>
+                    </select>
+                </div>
+                <button id="abl-kereso-btn" class="abx-keres-gomb">Keresés</button>
+            </div>
+            <div id="abl-eredmenyek" class="alliance-battle-results">
+                <div class="ab-col dps"><h4>DPS</h4><div class="col-content"></div></div>
+                <div class="ab-col leader"><h4>Leader</h4><div class="col-content"></div></div>
+                <div class="ab-col support"><h4>Support</h4><div class="col-content"></div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 6. NÉZET: KÁRTYA META -->
+    <div id="kartya-meta-view" class="kartya-meta-container rejtett">
+        
+        <!-- F2P / KLÁN META SZEKCIÓ -->
+        <div class="kartya-szekcio f2p" style="border-top: 3px solid var(--mff-blast);">
+            <h2 style="border-bottom-color: var(--mff-blast);">Elit F2P / Klán Átlag Meta <span style="font-size: 12px; color: #8892b0; margin-left: auto;">(Valós Tesztelt Adatok Alapján)</span></h2>
+            
+            <div style="width: 100%; margin: 20px 0 10px 0; font-weight: 900; color: #E0E0E0; text-transform: uppercase; font-size: 14px; letter-spacing: 1px;">F2P Célkitűzés (Átlagolt Klán Statisztikák):</div>
+            <div class="target-stats" style="border-left-color: var(--mff-blast); margin-top: 0;">
+                <div class="stat-box"><span class="stat-nev">Pierce</span><span class="stat-ertek kiemelt" style="color: var(--mff-blast);">~22.0%</span></div>
+                <div class="stat-box"><span class="stat-nev">All Basic Attack</span><span class="stat-ertek kiemelt" style="color: var(--mff-blast);">~105.8%</span></div>
+                <div class="stat-box"><span class="stat-nev">Max HP</span><span class="stat-ertek">~31.7%</span></div>
+                <div class="stat-box"><span class="stat-nev">Ignore Defense</span><span class="stat-ertek">~46.7%</span></div>
+                <div class="stat-box"><span class="stat-nev">Cooldown Duration</span><span class="stat-ertek">~37.5%</span></div>
+                <div class="stat-box"><span class="stat-nev">Attack Speed</span><span class="stat-ertek">~31.5%</span></div>
+                <div class="stat-box"><span class="stat-nev">Crit Rate</span><span class="stat-ertek">~27.5%</span></div>
+                <div class="stat-box"><span class="stat-nev">Crit Damage</span><span class="stat-ertek">~35.8%</span></div>
+                <div class="stat-box"><span class="stat-nev">Physical Attack</span><span class="stat-ertek">~19.8%</span></div>
+                <div class="stat-box"><span class="stat-nev">Energy Attack</span><span class="stat-ertek">~17.4%</span></div>
+                <div class="stat-box"><span class="stat-nev">All Basic Defenses</span><span class="stat-ertek">~38.6%</span></div>
+                <div class="stat-box"><span class="stat-nev">Dodge</span><span class="stat-ertek">~29.0%</span></div>
+                <div class="stat-box"><span class="stat-nev">Movement Speed</span><span class="stat-ertek">~39.3%</span></div>
+                <div class="stat-box"><span class="stat-nev">Crowd Control Time</span><span class="stat-ertek">~54.0%</span></div>
+                <div class="stat-box"><span class="stat-nev">Recovery Rate</span><span class="stat-ertek">~22.3%</span></div>
+                <div class="stat-box"><span class="stat-nev">Ignore Dodge</span><span class="stat-ertek">~3.0%</span></div>
+            </div>
+
+            <div class="kartya-grid">
+                <div class="comic-card">
+                    <img src="card_black_panther_166.webp" onerror="this.src='card_placeholder.webp'" alt="BLACK PANTHER #166">
+                    <h4 style="color: var(--mff-blast);">BLACK PANTHER #166</h4>
+                    <span style="font-size: 11px; color: #8892b0; margin-top: 5px;">Alapmű (Klán 100%)</span>
+                </div>
+                <div class="comic-card">
+                    <img src="card_civil_war_5.webp" onerror="this.src='card_placeholder.webp'" alt="CIVIL WAR #5">
+                    <h4 style="color: var(--mff-blast);">CIVIL WAR #5</h4>
+                    <span style="font-size: 11px; color: #8892b0; margin-top: 5px;">All Attack / HP</span>
+                </div>
+                <div class="comic-card">
+                    <img src="card_spiderman_605.webp" onerror="this.src='card_placeholder.webp'" alt="THE AMAZING SPIDER-MAN #605">
+                    <h4 style="color: var(--mff-blast);">AMAZING SPIDER-MAN #605</h4>
+                    <span style="font-size: 11px; color: #8892b0; margin-top: 5px;">All Attack Fókusz</span>
+                </div>
+                <div class="comic-card">
+                    <img src="card_crescent.webp" onerror="this.src='card_placeholder.webp'" alt="CRESCENT & IO">
+                    <h4 style="color: var(--mff-blast);">CRESCENT & IO</h4>
+                    <span style="font-size: 11px; color: #8892b0; margin-top: 5px;">Fizikai PVE Támadó</span>
+                </div>
+                <div class="comic-card">
+                    <img src="card_white_fox.webp" onerror="this.src='card_placeholder.webp'" alt="WHITE FOX">
+                    <h4 style="color: var(--mff-blast);">WHITE FOX</h4>
+                    <span style="font-size: 11px; color: #8892b0; margin-top: 5px;">Univerzális F2P Meta</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="kartya-szekcio pve">
+            <h2>Abszolút PvE Kártya Meta <span style="font-size: 12px; color: #8892b0; margin-left: auto;">(Koreai Toplista alapján)</span></h2>
+            
+            <div style="width: 100%; margin: 20px 0 10px 0; font-weight: 900; color: #E0E0E0; text-transform: uppercase; font-size: 14px; letter-spacing: 1px;">Koreai PvE Elit Átlag (Teljes Kártya-statisztika):</div>
+            <div class="target-stats" style="margin-top: 0;">
+                <div class="stat-box"><span class="stat-nev">Pierce</span><span class="stat-ertek kiemelt">25% (Max)</span></div>
+                <div class="stat-box"><span class="stat-nev">All Basic Attack</span><span class="stat-ertek kiemelt">106.1%</span></div>
+                <div class="stat-box"><span class="stat-nev">Energy Attack</span><span class="stat-ertek">52.0%</span></div>
+                <div class="stat-box"><span class="stat-nev">Physical Attack</span><span class="stat-ertek">36.6%</span></div>
+                <div class="stat-box"><span class="stat-nev">Ignore Defense</span><span class="stat-ertek kiemelt">80.0%</span></div>
+                <div class="stat-box"><span class="stat-nev">Cooldown Duration</span><span class="stat-ertek kiemelt">29.6%</span></div>
+                <div class="stat-box"><span class="stat-nev">Max HP</span><span class="stat-ertek">41.1%</span></div>
+                <div class="stat-box"><span class="stat-nev">All Basic Defenses</span><span class="stat-ertek">67.7%</span></div>
+                <div class="stat-box"><span class="stat-nev">Dodge</span><span class="stat-ertek">38.7%</span></div>
+                <div class="stat-box"><span class="stat-nev">Crowd Control</span><span class="stat-ertek">32.2%</span></div>
+                <div class="stat-box"><span class="stat-nev">Recovery Rate</span><span class="stat-ertek">18.3%</span></div>
+                <div class="stat-box"><span class="stat-nev">Ignore Dodge</span><span class="stat-ertek">4.3%</span></div>
+            </div>
+
+            <div class="kartya-grid">
+                <div class="comic-card">
+                    <img src="card_ghost_rider.webp" onerror="this.src='card_placeholder.webp'" alt="GHOST RIDER">
+                    <h4>GHOST RIDER</h4>
+                    <span style="font-size: 11px; color: #8892b0; margin-top: 5px;">#1 Használat</span>
+                </div>
+                <div class="comic-card">
+                    <img src="card_luna_snow.webp" onerror="this.src='card_placeholder.webp'" alt="LUNA SNOW">
+                    <h4>LUNA SNOW</h4>
+                    <span style="font-size: 11px; color: #8892b0; margin-top: 5px;">Prémium</span>
+                </div>
+                <div class="comic-card">
+                    <img src="card_white_fox.webp" onerror="this.src='card_placeholder.webp'" alt="WHITE FOX">
+                    <h4>WHITE FOX</h4>
+                    <span style="font-size: 11px; color: #8892b0; margin-top: 5px;">Prémium</span>
+                </div>
+                <div class="comic-card">
+                    <img src="card_fantastic_four.webp" onerror="this.src='card_placeholder.webp'" alt="FANTASTIC FOUR">
+                    <h4>FANTASTIC FOUR</h4>
+                    <span style="font-size: 11px; color: #8892b0; margin-top: 5px;">Artbook / Future Foundation</span>
+                </div>
+                <div class="comic-card">
+                    <img src="card_anad_avengers.webp" onerror="this.src='card_placeholder.webp'" alt="ALL-NEW, ALL-DIFFERENT AVENGERS #1">
+                    <h4>ALL-NEW, ALL-DIFFERENT AVENGERS #1</h4>
+                    <span style="font-size: 11px; color: #8892b0; margin-top: 5px;">Artbook</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="kartya-szekcio pvp">
+            <h2>Abszolút PvP Kártya Meta <span style="font-size: 12px; color: #8892b0; margin-left: auto;">(Koreai Toplista alapján)</span></h2>
+            
+            <div style="width: 100%; margin: 20px 0 10px 0; font-weight: 900; color: #E0E0E0; text-transform: uppercase; font-size: 14px; letter-spacing: 1px;">Koreai PvP Elit Átlag (Teljes Kártya-statisztika):</div>
+            <div class="target-stats" style="margin-top: 0; border-left-color: var(--mff-universal);">
+                <div class="stat-box"><span class="stat-nev">Max HP</span><span class="stat-ertek kiemelt">96.5%</span></div>
+                <div class="stat-box"><span class="stat-nev">All Basic Attack</span><span class="stat-ertek kiemelt">116.2%</span></div>
+                <div class="stat-box"><span class="stat-nev">Pierce</span><span class="stat-ertek kiemelt">25% (Max)</span></div>
+                <div class="stat-box"><span class="stat-nev">Energy Attack</span><span class="stat-ertek">94.0%</span></div>
+                <div class="stat-box"><span class="stat-nev">Physical Attack</span><span class="stat-ertek">17.5%</span></div>
+                <div class="stat-box"><span class="stat-nev">Ignore Defense</span><span class="stat-ertek">38.9%</span></div>
+                <div class="stat-box"><span class="stat-nev">Cooldown Duration</span><span class="stat-ertek">30.6%</span></div>
+                <div class="stat-box"><span class="stat-nev">All Basic Defenses</span><span class="stat-ertek">71.4%</span></div>
+                <div class="stat-box"><span class="stat-nev">Crowd Control</span><span class="stat-ertek kiemelt">47.0%</span></div>
+                <div class="stat-box"><span class="stat-nev">Dodge</span><span class="stat-ertek">40.5%</span></div>
+                <div class="stat-box"><span class="stat-nev">Recovery Rate</span><span class="stat-ertek">10.2%</span></div>
+                <div class="stat-box"><span class="stat-nev">Ignore Dodge</span><span class="stat-ertek">7.2%</span></div>
+            </div>
+
+            <div class="kartya-grid">
+                <div class="comic-card">
+                    <img src="card_luna_snow.webp" onerror="this.src='card_placeholder.webp'" alt="LUNA SNOW">
+                    <h4>LUNA SNOW</h4>
+                    <span style="font-size: 11px; color: #8892b0; margin-top: 5px;">Hibrid #1</span>
+                </div>
+                <div class="comic-card">
+                    <img src="card_gotg_bse.webp" onerror="this.src='card_placeholder.webp'" alt="GUARDIANS OF THE GALAXY BEST STORY EVER">
+                    <h4>GUARDIANS OF THE GALAXY BEST STORY EVER</h4>
+                    <span style="font-size: 11px; color: #8892b0; margin-top: 5px;">Artbook</span>
+                </div>
+                <div class="comic-card">
+                    <img src="card_marvel_zombie.webp" onerror="this.src='card_placeholder.webp'" alt="MARVEL ZOMBIE">
+                    <h4>MARVEL ZOMBIE</h4>
+                    <span style="font-size: 11px; color: #8892b0; margin-top: 5px;">Max HP Fókusz</span>
+                </div>
+                <div class="comic-card">
+                    <img src="card_new_avengers_9.webp" onerror="this.src='card_placeholder.webp'" alt="NEW AVENGERS 9">
+                    <h4>NEW AVENGERS 9</h4>
+                    <span style="font-size: 11px; color: #8892b0; margin-top: 5px;">Max HP / PvP</span>
+                </div>
+                <div class="comic-card">
+                    <img src="card_crescent.webp" onerror="this.src='card_placeholder.webp'" alt="CRESCENT">
+                    <h4>CRESCENT</h4>
+                    <span style="font-size: 11px; color: #8892b0; margin-top: 5px;">Prémium</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+<script src="app.js"></script>
+
+    <!-- --- JOGI NYILATKOZAT / LEGAL DISCLAIMER --- -->
+    <footer style="text-align: center; padding: 40px 20px; margin-top: 60px; border-top: 1px solid #2a3441; font-size: 11px; color: #555e70; line-height: 1.6; background-color: #05070a;">
+        <div style="max-width: 900px; margin: 0 auto;">
+            <p style="margin-bottom: 15px;">
+                <strong style="color: #8892b0;">HU:</strong> Ez egy nem hivatalos rajongói oldal. A Marvel Future Fight, a karakterek és a kapcsolódó grafikák a Marvel és a Netmarble tulajdonát képezik. Az oldal semmilyen módon nem áll kapcsolatban a Netmarble Corporationnel vagy a Marvel Entertainmenttel. Készült a magyar Marvel Future Fight közösség támogatására, kizárólag információs céllal.
+            </p>
+            <p style="margin: 0;">
+                <strong style="color: #8892b0;">EN:</strong> This is an unofficial fan site. Marvel Future Fight, its characters, and related graphics are the property and copyright of Marvel and Netmarble. This site is not affiliated with, endorsed, sponsored, or specifically approved by Netmarble Corporation or Marvel Entertainment in any way. Created solely for informational purposes to support the Marvel Future Fight community.
+            </p>
+        </div>
+    </footer>
+
+</body>
+</html>
