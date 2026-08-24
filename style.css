@@ -1,4 +1,4 @@
-        /* --- HIVATALOS MFF SZÍNEK --- */
+/* --- HIVATALOS MFF SZÍNEK --- */
         :root {
             --mff-combat: #ef5350;
             --mff-blast: #29b6f6;
@@ -15,14 +15,41 @@
 
         html {
             margin: 0; padding: 0; width: 100%;
+            /* ÚJ: Teljes tiltás a mobilos oldalirányú rángatózásra */
+            overflow-x: hidden; 
+            overscroll-behavior-x: none;
         }
 
         body { 
             margin: 0; padding: 0; background-color: var(--mff-bg); color: #E0E0E0; 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            overflow-x: clip;
+            /* ÚJ: Fixáljuk a testet, hogy ne lehessen elhúzni */
+            overflow-x: hidden;
+            overscroll-behavior-x: none;
             width: 100%;
         }
+        /* --- BELÉPTETŐ RENDSZER (INVITE WALL) --- */
+        .invite-wall-container {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #05070a; z-index: 9999; display: flex;
+            align-items: center; justify-content: center;
+        }
+        .invite-box {
+            background: var(--mff-card); border: 1px solid #2a3441; border-top: 3px solid var(--mff-t4);
+            padding: 30px; border-radius: 8px; width: 90%; max-width: 400px; text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+        }
+        #invite-input {
+            width: 100%; padding: 12px; border-radius: 4px; border: 1px solid #2a3441;
+            background: #090c10; color: #fff; font-size: 16px; margin-bottom: 15px;
+            text-align: center; font-weight: bold; outline: none; transition: 0.2s;
+        }
+        #invite-input:focus { border-color: var(--mff-t4); box-shadow: 0 0 10px rgba(255, 23, 68, 0.2); }
+        #invite-btn {
+            width: 100%; padding: 12px; background: var(--mff-t4); color: #fff; border: none;
+            border-radius: 4px; font-weight: 900; text-transform: uppercase; cursor: pointer; transition: 0.2s;
+        }
+        #invite-btn:hover { background: #ff5252; box-shadow: 0 0 15px rgba(255, 23, 68, 0.4); }
         
         body { 
             background-image: 
@@ -67,10 +94,11 @@
         .sajat-raktar-tarolo input[type="checkbox"] { cursor: pointer; accent-color: var(--mff-gold); width: 16px; height: 16px; margin:0;}
         .sajat-raktar-tarolo label { font-size: 12px; font-weight: 900; color: #E0E0E0; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px;}
 
-        /* GOMBOK VÍZSZINTES GÖRGETÉSE MOBILON */
+       /* GOMBOK VÍZSZINTES GÖRGETÉSE MOBILON */
         .fejlec-gombok { 
             display: flex; gap: 10px; overflow-x: auto; white-space: nowrap; 
             scrollbar-width: none; -ms-overflow-style: none; padding-bottom: 4px;
+            overscroll-behavior-x: contain; /* ÚJ: Megakadályozza a weblap oldalirányú "túlhúzását" */
         }
         .fejlec-gombok::-webkit-scrollbar { display: none; }
         
@@ -78,6 +106,11 @@
             background-color: var(--mff-card); border: 1px solid #2a3441; color: #8892b0;
             padding: 10px 15px; border-radius: 20px; cursor: pointer; font-weight: bold;
             font-size: 12px; transition: 0.2s; white-space: nowrap; text-transform: uppercase; letter-spacing: 0.5px;
+            
+            /* ÚJ: Kőkemény védelem a szövegkijelölés és a "szellemkép" húzása ellen */
+            user-select: none; 
+            -webkit-user-select: none; 
+            -webkit-user-drag: none; 
         }
         .mod-toggle-btn:hover { color: #fff; border-color: #4da6ff; }
         .mod-toggle-btn.aktiv { background-color: var(--mff-t4); border-color: var(--mff-t4); color: #fff; box-shadow: 0 0 15px rgba(255, 23, 68, 0.6); }
@@ -85,6 +118,9 @@
         #abx-mod-gomb.aktiv { background-color: #29b6f6; border-color: #29b6f6; box-shadow: 0 0 15px rgba(41, 182, 246, 0.6); }
         #kartya-meta-gomb.aktiv { background-color: var(--mff-gold); border-color: var(--mff-gold); color: #000; box-shadow: 0 0 15px rgba(253, 216, 53, 0.6); }
         
+        /* ASZTALI NÉZET: IKONOK ELREJTÉSE */
+        .nav-icon { display: none; }
+
         .hamburger-btn { display: flex; flex-direction: column; justify-content: space-around; width: 26px; height: 20px; background: transparent; border: none; cursor: pointer; padding: 0; z-index: 1001; }
         .hamburger-btn span { width: 26px; height: 3px; background-color: #fff; border-radius: 3px; transition: all 0.3s ease; }
         .hamburger-btn:hover span { background-color: var(--mff-gold); }
@@ -197,15 +233,86 @@
         
         /* KŐKEMÉNY MOBILOS OPTIMALIZÁCIÓS SZABÁLYOK */
         @media (max-width: 900px) {
+            body { padding-bottom: 80px; } /* Helyet csinál az alsó menünek */
+            
             .reszletek-grid { flex-direction: column; width: 100%; max-width: 100%; }
             .reszletek-bal { flex: auto; width: 100%; position: static; box-sizing: border-box;}
             .karakter-nagy-kep { max-height: 400px; object-fit: contain; }
             .reszletek-jobb { padding: 15px; width: 100%; max-width: 100%; box-sizing: border-box; }
             
-            .kereso-tarolo { gap: 8px; justify-content: flex-start; }
-            #kereso-mezo { max-width: 50%; padding: 10px 15px; font-size: 12px; }
+            /* --- AZ ALSÓ NAVIGÁCIÓS SÁV (BOTTOM NAV) ÁTMENETE --- */
+            #ragados-fejlec { flex-wrap: nowrap; padding: 10px 15px; }
+            .kereso-tarolo { width: 100%; justify-content: space-between; gap: 10px; }
+            .kereso-input-wrapper { max-width: 65%; }
+            #kereso-mezo { max-width: 100%; }
             .sajat-raktar-tarolo label { display: inline-block; font-size: 10px; }
             
+           .fejlec-gombok { 
+                position: fixed; 
+                bottom: 0; left: 0; width: 100%; 
+                background-color: rgba(5, 7, 10, 0.98); 
+                backdrop-filter: blur(10px); 
+                border-top: 1px solid #2a3441; 
+                display: flex; 
+                justify-content: space-around; 
+                align-items: center; 
+                padding: 10px 5px 20px 5px; 
+                z-index: 2000; 
+                /* Módosítva, hogy ne csússzon ki semmi */
+                overflow-x: hidden; 
+                overscroll-behavior-x: none;
+                gap: 0;
+                box-shadow: 0 -5px 20px rgba(0,0,0,0.8);
+            }
+            
+            .fejlec-gombok::-webkit-scrollbar { display: none; }
+    
+            .mod-toggle-btn {
+                background: transparent !important;
+                border: none !important;
+                box-shadow: none !important;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                gap: 5px;
+                padding: 5px;
+                width: 16%;
+                color: #555e70;
+            }
+    
+            .nav-icon {
+                display: block;
+                font-size: 22px;
+                filter: grayscale(100%);
+                opacity: 0.5;
+                transition: 0.2s ease;
+            }
+    
+            .nav-text {
+                font-size: 9px;
+                font-weight: 900;
+                letter-spacing: 0;
+                white-space: nowrap;
+            }
+    
+            .mod-toggle-btn.aktiv { color: #fff !important; }
+            .mod-toggle-btn.aktiv .nav-icon {
+                filter: grayscale(0%);
+                opacity: 1;
+                transform: scale(1.15);
+            }
+            
+            #grid-mod-gomb.aktiv { color: var(--mff-t4) !important; }
+            #ctp-mod-gomb.aktiv { color: #f44336 !important; }
+            #pvp-mod-gomb.aktiv { color: #ab47bc !important; }
+            #tier-list-gomb.aktiv { color: #fff !important; } 
+            #abx-mod-gomb.aktiv { color: #29b6f6 !important; }
+            #kartya-meta-gomb.aktiv { color: var(--mff-gold) !important; }
+            
+            /* Felgörgető gomb megemelése az alsó sáv miatt */
+            .scroll-top-btn { bottom: 90px; }
+            /* ----------------------------------------------------- */
+
             /* KÁRTYÁK MOBILOS HORIZONTÁLIS GÖRGETÉSE (VISSZA 1 SORRA) */
             .kartya-grid { 
                 display: flex !important; 
@@ -220,7 +327,7 @@
             }
             .kartya-grid::-webkit-scrollbar { display: none; }
             .comic-card { 
-                flex: 0 0 180px !important; /* Fix szélesség, hogy a kártya ne legyen se túl keskeny, se túl széles */
+                flex: 0 0 180px !important; 
                 max-width: 180px !important; 
                 scroll-snap-align: start; 
             }
@@ -230,7 +337,7 @@
                 display: grid !important; 
                 grid-template-rows: repeat(2, 1fr) !important;
                 grid-auto-flow: column !important; 
-                grid-auto-columns: 140px !important; /* Doboz szélessége */
+                grid-auto-columns: 140px !important; 
                 overflow-x: auto !important; 
                 overflow-y: hidden !important;
                 scroll-snap-type: x mandatory; 
@@ -265,6 +372,27 @@
             .tier-row { flex-direction: column !important; }
             .tier-label { width: 100% !important; height: 40px !important; border-right: none !important; border-bottom: 2px solid #000 !important; font-size: 20px !important; border-radius: 8px 8px 0 0; }
             .tier-mini-card { flex: 0 0 auto !important; width: 100% !important; scroll-snap-align: start; }
+
+            /* --- PVP MATCHUP MOBILOS CAROUSEL --- */
+            .matchup-container { 
+                flex-direction: row !important; 
+                overflow-x: auto !important; 
+                overflow-y: hidden !important;
+                scroll-snap-type: x mandatory; 
+                padding: 15px 10px !important; 
+                height: calc(100vh - 140px) !important; /* Igazodik az alsó menühöz */
+                -ms-overflow-style: none; 
+                scrollbar-width: none; 
+                gap: 15px !important;
+            }
+            .matchup-container::-webkit-scrollbar { display: none; }
+            
+            .matchup-col { 
+                flex: 0 0 88% !important; 
+                max-width: 88% !important; 
+                scroll-snap-align: center; 
+                height: 100% !important;
+            }
         }
 
         /* --- MATCHUP MODUL --- */
@@ -347,3 +475,105 @@
         .stat-box .stat-ertek.kiemelt { color: var(--mff-speed); }
         .kartya-szekcio.pvp .target-stats { border-left-color: var(--mff-universal); }
         .kartya-szekcio.pvp .stat-ertek.kiemelt { color: var(--mff-universal); }
+
+/* --- KERESŐ MEZŐ TÖRLÉS GOMB (JAVÍTOTT) --- */
+.kereso-input-wrapper {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    width: 100%;
+    max-width: 350px;
+}
+#kereso-mezo {
+    width: 100%;
+    box-sizing: border-box;
+    padding-right: 35px !important;
+}
+#kereso-torles-gomb {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    color: #8892b0;
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    transition: color 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+#kereso-torles-gomb:hover {
+    color: #ef5350;
+}
+
+/* --- ÚJ, DEDIKÁLT CTP KERESŐ NÉZET --- */
+.ctp-szuro-container {
+    max-width: 1400px;
+    margin: 40px auto;
+    padding: 0 20px;
+}
+.ctp-nagy-valaszto {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    justify-content: center;
+    margin-bottom: 40px;
+}
+.ctp-kategoria-kartya {
+    background: #090c10;
+    border: 2px solid #2a3441;
+    border-radius: 8px;
+    padding: 15px;
+    width: 120px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+}
+.ctp-kategoria-kartya img {
+    width: 60px;
+    height: 60px;
+    object-fit: contain;
+    margin-bottom: 10px;
+    border-radius: 4px;
+}
+.ctp-kategoria-kartya span {
+    color: #8892b0;
+    font-weight: 900;
+    font-size: 12px;
+    text-transform: uppercase;
+    text-align: center;
+}
+.ctp-kategoria-kartya:hover {
+    transform: translateY(-5px);
+    border-color: var(--mff-blast);
+    box-shadow: 0 5px 15px rgba(41, 182, 246, 0.3);
+}
+.ctp-kategoria-kartya.aktiv {
+    border-color: var(--mff-t4);
+    background: rgba(255, 23, 68, 0.1);
+    box-shadow: 0 0 20px rgba(255, 23, 68, 0.5);
+}
+.ctp-kategoria-kartya.aktiv span {
+    color: #fff;
+}
+.ctp-eredmeny-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 30px;
+    row-gap: 60px;
+    justify-content: center;
+    padding: 40px 0;
+    align-items: start;
+}
+#ctp-mod-gomb.aktiv {
+    background-color: #f44336;
+    border-color: #f44336;
+    box-shadow: 0 0 15px rgba(244, 67, 54, 0.6);
+}

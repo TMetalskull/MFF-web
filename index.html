@@ -19,6 +19,16 @@
    <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <!-- KŐKEMÉNY BELÉPTETŐ RENDSZER -->
+    <div id="invite-wall" class="invite-wall-container">
+        <div class="invite-box">
+            <h2 style="color: var(--mff-t4); margin-bottom: 10px; text-transform: uppercase;">Zárt Rendszer</h2>
+            <p style="color: #8892b0; font-size: 12px; margin-bottom: 20px;">Ez a lexikon kizárólag a magyar klán tagjai számára készült. Kérlek, add meg a meghívó kódot a hozzáféréshez.</p>
+            <input type="password" id="invite-input" placeholder="Meghívó kód..." autocomplete="off">
+            <button id="invite-btn">Belépés</button>
+            <p id="invite-error" style="color: #ff5252; font-size: 11px; margin-top: 10px; display: none; font-weight: bold;">Helytelen kód!</p>
+        </div>
+    </div>
 
     <h1>MFF Magyar Lexikon</h1>
 
@@ -27,18 +37,22 @@
             <span></span><span></span><span></span>
         </button>
         <div class="kereso-tarolo">
-            <input type="text" id="kereso-mezo" placeholder="🔍 Karakter keresése (Pl. Storm)...">
+            <div class="kereso-input-wrapper">
+    <input type="text" id="kereso-mezo" placeholder="🔍 Karakter keresése (Pl. Storm)...">
+    <button id="kereso-torles-gomb" class="rejtett" title="Keresés törlése">&times;</button>
+</div>
             <label class="sajat-raktar-tarolo" title="Csak a sajátként megjelölt karaktereidet mutatja">
                 <input type="checkbox" id="sajat-raktar-toggle">
                 <label for="sajat-raktar-toggle">Csak Sajátok</label>
             </label>
         </div>
         <div class="fejlec-gombok">
-            <button id="grid-mod-gomb" class="mod-toggle-btn aktiv">Lexikon</button>
-            <button id="pvp-mod-gomb" class="mod-toggle-btn">PvP Matchup</button>
-            <button id="tier-list-gomb" class="mod-toggle-btn">Tier List</button>
-            <button id="abx-mod-gomb" class="mod-toggle-btn">Alliance Battle</button>
-            <button id="kartya-meta-gomb" class="mod-toggle-btn">Kártyák</button>
+            <button id="grid-mod-gomb" class="mod-toggle-btn aktiv"><span class="nav-icon">📖</span><span class="nav-text">Lexikon</span></button>
+            <button id="ctp-mod-gomb" class="mod-toggle-btn"><span class="nav-icon">💎</span><span class="nav-text">CTP Kereső</span></button>
+            <button id="pvp-mod-gomb" class="mod-toggle-btn"><span class="nav-icon">⚔️</span><span class="nav-text">PvP Matchup</span></button>
+            <button id="tier-list-gomb" class="mod-toggle-btn"><span class="nav-icon">📊</span><span class="nav-text">Tier List</span></button>
+            <button id="abx-mod-gomb" class="mod-toggle-btn"><span class="nav-icon">🏆</span><span class="nav-text">Alliance Battle</span></button>
+            <button id="kartya-meta-gomb" class="mod-toggle-btn"><span class="nav-icon">🃏</span><span class="nav-text">Kártyák</span></button>
         </div>
     </div>
 
@@ -103,6 +117,78 @@
 
     <!-- 1. ALAP NÉZET: GRID -->
     <div id="karakter-grid"></div>
+
+    <!-- 7. ÚJ NÉZET: DEDIKÁLT CTP KERESŐ FÜL -->
+    <div id="ctp-szuro-view" class="ctp-szuro-container rejtett">
+        <h2 style="color: var(--mff-gold); text-align: center; text-transform: uppercase; margin-bottom: 30px; letter-spacing: 2px;">Válassz Meta CTP-t</h2>
+        
+        <div class="ctp-nagy-valaszto">
+            <div class="ctp-kategoria-kartya" data-ctp="AUTHORITY">
+                <img src="ctp_authority.webp" alt="Authority" onerror="this.src='placeholder.webp'">
+                <span>Authority</span>
+            </div>
+            <div class="ctp-kategoria-kartya" data-ctp="COMPETITION">
+                <img src="ctp_competition.webp" alt="Competition" onerror="this.src='placeholder.webp'">
+                <span>Competition</span>
+            </div>
+            <div class="ctp-kategoria-kartya" data-ctp="CONQUEST">
+                <img src="ctp_conquest.webp" alt="Conquest" onerror="this.src='placeholder.webp'">
+                <span>Conquest</span>
+            </div>
+            <div class="ctp-kategoria-kartya" data-ctp="DESTRUCTION">
+                <img src="ctp_destruction.webp" alt="Destruction" onerror="this.src='placeholder.webp'">
+                <span>Destruction</span>
+            </div>
+            <div class="ctp-kategoria-kartya" data-ctp="ENERGY">
+                <img src="ctp_energy.webp" alt="Energy" onerror="this.src='placeholder.webp'">
+                <span>Energy</span>
+            </div>
+            <div class="ctp-kategoria-kartya" data-ctp="GREED">
+                <img src="ctp_greed.webp" alt="Greed" onerror="this.src='placeholder.webp'">
+                <span>Greed</span>
+            </div>
+            <div class="ctp-kategoria-kartya" data-ctp="INSIGHT">
+                <img src="ctp_insight.webp" alt="Insight" onerror="this.src='placeholder.webp'">
+                <span>Insight</span>
+            </div>
+            <div class="ctp-kategoria-kartya" data-ctp="JUDGEMENT">
+                <img src="ctp_judgement.webp" alt="Judgement" onerror="this.src='placeholder.webp'">
+                <span>Judgement</span>
+            </div>
+            <div class="ctp-kategoria-kartya" data-ctp="LIBERATION">
+                <img src="ctp_liberation.webp" alt="Liberation" onerror="this.src='placeholder.webp'">
+                <span>Liberation</span>
+            </div>
+            <div class="ctp-kategoria-kartya" data-ctp="PATIENCE">
+                <img src="ctp_patience.webp" alt="Patience" onerror="this.src='placeholder.webp'">
+                <span>Patience</span>
+            </div>
+            <div class="ctp-kategoria-kartya" data-ctp="RAGE">
+                <img src="ctp_rage.webp" alt="Rage" onerror="this.src='placeholder.webp'">
+                <span>Rage</span>
+            </div>
+            <div class="ctp-kategoria-kartya" data-ctp="REFINEMENT">
+                <img src="ctp_refinement.webp" alt="Refinement" onerror="this.src='placeholder.webp'">
+                <span>Refinement</span>
+            </div>
+            <div class="ctp-kategoria-kartya" data-ctp="REGENERATION">
+                <img src="ctp_regeneration.webp" alt="Regeneration" onerror="this.src='placeholder.webp'">
+                <span>Regeneration</span>
+            </div>
+            <div class="ctp-kategoria-kartya" data-ctp="TRANSCENDENCE">
+                <img src="ctp_transcendence.webp" alt="Transcendence" onerror="this.src='placeholder.webp'">
+                <span>Transcendence</span>
+            </div>
+            <div class="ctp-kategoria-kartya" data-ctp="VETERAN">
+                <img src="ctp_veteran.webp" alt="Veteran" onerror="this.src='placeholder.webp'">
+                <span>Veteran</span>
+            </div>
+        </div>
+
+        <div id="ctp-kereso-eredmenyek" class="ctp-eredmeny-grid">
+            <p class="placeholder-text" style="grid-column: 1 / -1;">Kattints egy CTP-re a fenti listából, hogy megkapd az azt használó karaktereket!</p>
+        </div>
+    </div>
 
     <!-- 5. ÚJ NÉZET: DEDIKÁLT KARAKTER ADATLAP (SPA) -->
     <div id="karakter-reszletek-view" class="rejtett">
@@ -369,7 +455,8 @@
 
     </div>
 
-<script src="app.js"></script>
+    <!-- A TE SAJÁT LOGIKÁD MODULKÉNT BEKÖTVE -->
+    <script type="module" src="app.js"></script>
 
     <!-- --- JOGI NYILATKOZAT / LEGAL DISCLAIMER --- -->
     <footer style="text-align: center; padding: 40px 20px; margin-top: 60px; border-top: 1px solid #2a3441; font-size: 11px; color: #555e70; line-height: 1.6; background-color: #05070a;">
