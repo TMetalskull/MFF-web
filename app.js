@@ -197,8 +197,8 @@ function getCTPIcon(ctpText) {
     else if (val.includes('AUTHORITY')) iconFile = 'ctp_authority.webp';
     else if (val.includes('GREED')) iconFile = 'ctp_greed.webp';
     else if (val.includes('INSIGHT')) iconFile = 'ctp_insight.webp';
-    else if (val.includes('JUDGEMENT') || val.includes('JUDGMENT')) {
-        iconFile = 'ctp_judgement.webp';
+    else if (val.includes('JUDGMENT') || val.includes('JUDGMENT')) {
+        iconFile = 'ctp_judgment.webp';
         fallbackFile = 'images/icons/ctp_judgment.webp';
     }
     else if (val.includes('REFINEMENT')) iconFile = 'ctp_refinement.webp';
