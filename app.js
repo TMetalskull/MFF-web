@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-app.js";
-import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore.js";
+import { getFirestore, collection, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyAwxRBst_SDlj06FAXCdjot2JHHAvaBrj8",
@@ -12,7 +12,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-let nyersKarakterAdatok = []; 
+let nyersKarakterAdatok = [];
 let szurok = { mode: 'all', type: 'all', species: 'all', alignment: 'all', role: 'all', search: '' };
 const szinek = { 'Combat': '#ef5350', 'Blast': '#29b6f6', 'Speed': '#66bb6a', 'Universal': '#ab47bc' };
 let jelenlegiNezet = 'grid-mod-gomb';
@@ -20,6 +20,146 @@ let utolsoScrollPozicio = 0;
 
 let sajatRaktar = JSON.parse(localStorage.getItem('mff_raktar')) || [];
 
+// ==============================================================
+// AUTOMATIKUS ADATKITÖLTŐ MOTOR (NULLA KÉZI MUNKÁHOZ)
+// ==============================================================
+const DEFAULT_URUS = {
+    ENERGY: [
+        "Odin's Blessing Magic (Energy Attack + Energy Attack)",
+        "Odin's Blessing Insight (Energy Attack + Ignore Defense)",
+        "Odin's Blessing Amplify (Energy Attack + Critical Damage)",
+        "Odin's Blessing Focus (Energy Attack + Critical Rate)",
+        "Odin's Blessing Will (Energy Attack + Skill Cooldown)",
+        "Odin's Blessing Heal (HP + HP)"
+    ],
+    PHYSICAL: [
+        "Odin's Blessing Strike (Physical Attack + Physical Attack)",
+        "Odin's Blessing Fortitude (Physical Attack + Ignore Defense)",
+        "Odin's Blessing Steel (Physical Attack + Critical Damage)",
+        "Odin's Blessing Toughness (Physical Attack + Critical Rate)",
+        "Odin's Blessing Will (Physical Attack + Skill Cooldown)",
+        "Odin's Blessing Heal (HP + HP)"
+    ],
+    HP: [
+        "Odin's Blessing Heal (HP + HP) - Minden lehetséges helyre HP-t kell tenni!",
+        "Attack Uru használata felesleges, mivel tisztán HP-ból skálázódik!"
+    ]
+};
+
+function getAutoSlug(charName) {
+    if (!charName) return 'placeholder';
+    return String(charName)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+}
+
+function getAutoUruSetup(c) {
+    if (Array.isArray(c.equipment?.uru_setup) && c.equipment.uru_setup.length > 0) {
+        return c.equipment.uru_setup;
+    }
+    const tags = (c.mechanics_tags || []).map(t => String(t).toLowerCase());
+    const dmgType = String(c.damage_type || '').toLowerCase();
+
+    if (tags.includes('hp_scaling') || dmgType === 'hp') {
+        return DEFAULT_URUS.HP;
+    }
+    if (
+        tags.some(t => t.includes('physical')) ||
+        dmgType.includes('physical') ||
+        (!tags.some(t => t.includes('energy') || t.includes('flame') || t.includes('cold') || t.includes('lightning') || t.includes('mind')) &&
+         (c.type === 'Combat' || c.type === 'Speed'))
+    ) {
+        return DEFAULT_URUS.PHYSICAL;
+    }
+    return DEFAULT_URUS.ENERGY;
+}
+
+function automatikusKarakterKiegeszites(rawChar) {
+    const c = { ...rawChar };
+    const slug = getAutoSlug(c.character);
+
+    // 1. Automatikus portrékép URL (ha nincs megadva a JSON-ban)
+    if (!c.image_url) {
+        c.image_url = `${slug}.webp`;
+    }
+
+    // 2. Koreai bot által feltöltött meta_ctp elemzése (T4 státusz, birtoklási szám, szerepkör)
+    const metaCtpUpper = String(c.meta_ctp || '').toUpperCase();
+    const hasBotMeta = metaCtpUpper && metaCtpUpper !== 'NINCS ADAT' && metaCtpUpper !== '-';
+
+    let koreaiMintaSzam = 0;
+    const matchCount = metaCtpUpper.match(/KOREAI TOP\s+(\d+)/i);
+    if (matchCount) {
+        koreaiMintaSzam = parseInt(matchCount[1], 10);
+    }
+
+    if (hasBotMeta && koreaiMintaSzam > 0) {
+        c.tier = 'T4';
+    } else if (!c.tier) {
+        c.tier = 'T4';
+    }
+
+    // 3. Automatikus PvE / PvP / Leader / Support felismerés (bot CTP + Szerkesztő címkék alapján)
+    const isPvpCtp = /CONQUEST|AUTHORITY|GREED|REFINEMENT|REGENERATION/.test(metaCtpUpper);
+    const isPveCtp = /RAGE|COMPETITION|JUDGEMENT|JUDGMENT|ENERGY|DESTRUCTION/.test(metaCtpUpper);
+    const isSupCtp = /LIBERATION|INSIGHT|ASCENT/.test(metaCtpUpper);
+
+    const tagsLower = (c.mechanics_tags || []).map(t => String(t).toLowerCase());
+    const hasLeaderTag = tagsLower.includes('leadership') || tagsLower.includes('leader');
+    const hasSupportTag = tagsLower.includes('support') || isSupCtp;
+
+    if (!c.usage || c.usage === '?') {
+        if (isPvpCtp && isPveCtp) c.usage = 'PvE & PvP Hybrid';
+        else if (isPvpCtp) c.usage = 'PvP Meta';
+        else if (hasSupportTag && !isPveCtp && !isPvpCtp) c.usage = 'PvE / PvP Support';
+        else c.usage = 'PvE Meta';
+    }
+
+    if (!c.role || c.role === '-') {
+        let roleParts = [c.type || ''];
+        if (isPvpCtp && isPveCtp) roleParts.push('Hybrid DPS');
+        else if (isPvpCtp) roleParts.push('PvP DPS');
+        else roleParts.push('PvE DPS');
+
+        if (hasLeaderTag) roleParts.push('Leader');
+        if (hasSupportTag) roleParts.push('Support');
+        c.role = roleParts.join(' / ').trim();
+    } else {
+        if (hasLeaderTag && !c.role.toLowerCase().includes('leader')) c.role += ' / Leader';
+        if (hasSupportTag && !c.role.toLowerCase().includes('support')) c.role += ' / Support';
+    }
+
+    // 4. Automatikus Meta Tier (SS / S / A / B) számítás a koreai T4 birtoklás alapján
+    if (!c.meta_tier || c.meta_tier === 'UNRANKED') {
+        if (koreaiMintaSzam >= 32) c.meta_tier = 'SS';
+        else if (koreaiMintaSzam >= 18) c.meta_tier = 'S';
+        else if (koreaiMintaSzam >= 6) c.meta_tier = 'A';
+        else if (koreaiMintaSzam >= 1) c.meta_tier = 'B';
+    }
+
+    // 5. Automatikus ISO-8 és Uru kitöltés
+    if (!c.equipment) c.equipment = {};
+    if (c.meta_iso && c.meta_iso !== '-' && c.meta_iso !== 'ÜRES') {
+        c.equipment.iso_8_set = c.meta_iso;
+    } else if (!c.equipment.iso_8_set || c.equipment.iso_8_set === 'Nincs adat') {
+        c.equipment.iso_8_set = isPvpCtp && !isPveCtp
+            ? "Power of Angry Hulk / Overdrive / Binary Power (PvP)"
+            : "Power of Angry Hulk / Overdrive";
+    }
+    c.equipment.uru_setup = getAutoUruSetup(c);
+
+    // 6. Automatikus Artifact kép
+    if (c.own_artifact && !c.own_artifact.image) {
+        c.own_artifact.image = `artifact_${slug}.webp`;
+    }
+
+    return c;
+}
+
+// ==============================================================
+// UI ELEMEK ÉS ESEMÉNYKEZELŐK
+// ==============================================================
 const hamburgerGomb = document.getElementById('hamburger-menu-gomb');
 const szuroDrawer = document.getElementById('szuro-drawer');
 const drawerBezaras = document.getElementById('drawer-bezar-gomb');
@@ -35,19 +175,25 @@ drawerOverlay.addEventListener('click', csukSzurok);
 window.addEventListener('scroll', () => { felGomb.style.display = window.scrollY > 300 ? 'flex' : 'none'; });
 felGomb.addEventListener('click', () => { window.scrollTo({ top: 0, behavior: 'smooth' }); });
 
-function formatMFFStats(text) { if (!text) return ''; return text.replace(/([+-]?\d+(?:\.\d+)?%?)/g, '<span class="ertek-zold">$1</span>'); }
+function formatMFFStats(text) { if (!text) return ''; return String(text).replace(/([+-]?\d+(?:\.\d+)?%?)/g, '<span class="ertek-zold">$1</span>'); }
+
 function getCTPIcon(ctpText) {
     if (!ctpText) return '';
     const val = ctpText.toUpperCase();
     let iconFile = '';
-    
+    let fallbackFile = 'images/icons/placeholder.webp';
+
     if (val.includes('RAGE')) iconFile = 'ctp_rage.webp';
     else if (val.includes('CONQUEST')) iconFile = 'ctp_conquest.webp';
     else if (val.includes('COMPETITION')) iconFile = 'ctp_competition.webp';
     else if (val.includes('TRANSCENDENCE')) iconFile = 'ctp_transcendence.webp';
     else if (val.includes('AUTHORITY')) iconFile = 'ctp_authority.webp';
-    else if (val.includes('GREED') || val.includes('INSIGHT')) iconFile = 'ctp_insight.webp';
-    else if (val.includes('JUDGEMENT') || val.includes('JUDGMENT')) iconFile = 'ctp_judgement.webp';
+    else if (val.includes('GREED')) iconFile = 'ctp_greed.webp';
+    else if (val.includes('INSIGHT')) iconFile = 'ctp_insight.webp';
+    else if (val.includes('JUDGEMENT') || val.includes('JUDGMENT')) {
+        iconFile = 'ctp_judgement.webp';
+        fallbackFile = 'images/icons/ctp_judgment.webp';
+    }
     else if (val.includes('REFINEMENT')) iconFile = 'ctp_refinement.webp';
     else if (val.includes('ENERGY')) iconFile = 'ctp_energy.webp';
     else if (val.includes('DESTRUCTION')) iconFile = 'ctp_destruction.webp';
@@ -55,17 +201,25 @@ function getCTPIcon(ctpText) {
     else if (val.includes('LIBERATION')) iconFile = 'ctp_liberation.webp';
     else if (val.includes('VETERAN')) iconFile = 'ctp_veteran.webp';
     else if (val.includes('PATIENCE')) iconFile = 'ctp_patience.webp';
+    else if (val.includes('ASCENT')) iconFile = 'ctp_ascent.webp';
 
-    if (iconFile) return `<img src="${iconFile}" style="width: 50px; height: 50px; object-fit: contain; margin-right: 8px; border-radius: 4px; border: 1px solid #4da6ff;">`;
+    if (iconFile) {
+        return `<img src="images/icons/${iconFile}" onerror="this.onerror=null; this.src='${fallbackFile}';" style="width: 50px; height: 50px; object-fit: contain; margin-right: 8px; border-radius: 4px; border: 1px solid #4da6ff;">`;
+    }
     return '';
 }
+
 function formatCTPList(ctpString) {
-    if (!ctpString || ctpString === 'Nincs adat') return '<span class="mff-highlight-green" style="margin-left: 10px;">Nincs adat</span>';
+    if (!ctpString || ctpString === 'Nincs adat' || ctpString === '-') {
+        return '<span class="mff-highlight-green" style="margin-left: 10px;">Nincs adat</span>';
+    }
     return `<ul class="adat-lista" style="margin-top: 5px;">${ctpString.split('/').map(part => {
-        let text = part.trim(); if (!text) return '';
+        let text = part.trim();
+        if (!text || text === '-') return '';
         return `<li style="display: flex; align-items: center; margin-bottom: 8px;">${getCTPIcon(text)}<span class="mff-highlight-green">${formatMFFStats(text)}</span></li>`;
     }).join('')}</ul>`;
 }
+
 function getCancelIcon(text) {
     if (!text) return '';
     const val = text.toLowerCase(); let iconFile = '';
@@ -76,9 +230,11 @@ function getCancelIcon(text) {
     else if (val.includes('time freez')) iconFile = 'icon_time_freezing.webp'; else if (val.includes('freeze')) iconFile = 'icon_freeze.webp';
     else if (val.includes('bind')) iconFile = 'icon_bind.webp'; else if (val.includes('web')) iconFile = 'icon_web.webp';
     else if (val.includes('mind control')) iconFile = 'icon_mind_control.webp'; else if (val.includes('incapacitation')) iconFile = 'icon_incapacitation.webp';
-    if (iconFile) return `<img src="${iconFile}" class="cancel-icon">`;
+
+    if (iconFile) return `<img src="images/icons/${iconFile}" class="cancel-icon">`;
     return '';
 }
+
 function formatSkillName(text) {
     if (!text) return '';
     return text.replace(/Active ([\d, ]+)/gi, function(match, p1) {
@@ -86,21 +242,25 @@ function formatSkillName(text) {
         return nums.map(num => (num==='1'||num==='2'||num==='4')?num+'-es':(num==='3'?'3-as':(num==='5'?'5-ös':num))).join(', ') + ' skill';
     });
 }
+
 function getHardCounters(c) {
-    if (!c.matchup_engine || !c.matchup_engine.weak_against || c.matchup_engine.weak_against.length === 0) return '<div class="reszlet-sor" style="color: #666; font-style: italic;">Nincs meta kontra.</div>';
+    if (!c.matchup_engine || !c.matchup_engine.weak_against || c.matchup_engine.weak_against.length === 0) {
+        return '<div class="reszlet-sor" style="color: #666; font-style: italic;">Nincs meta kontra.</div>';
+    }
     return c.matchup_engine.weak_against.map(name => `<div class="counter-box"><span style="font-weight:bold; color:var(--mff-t4);">${name}</span></div>`).join('');
 }
+
 function getKarakterKep(nev) {
     const talalat = nyersKarakterAdatok.find(k => (k.character || "").toLowerCase() === nev.toLowerCase());
-    return talalat && talalat.image_url ? talalat.image_url : null;
+    return talalat && talalat.image_url ? talalat.image_url : `${getAutoSlug(nev)}.webp`;
 }
 
 const nezetGombok = document.querySelectorAll('.fejlec-gombok .mod-toggle-btn');
-const nezetek = { 
-    'grid-mod-gomb': 'karakter-grid', 
-    'ctp-mod-gomb': 'ctp-szuro-view', 
-    'pvp-mod-gomb': 'pvp-matchup-view', 
-    'tier-list-gomb': 'tier-list-view', 
+const nezetek = {
+    'grid-mod-gomb': 'karakter-grid',
+    'ctp-mod-gomb': 'ctp-szuro-view',
+    'pvp-mod-gomb': 'pvp-matchup-view',
+    'tier-list-gomb': 'tier-list-view',
     'abx-mod-gomb': 'abx-abl-view',
     'kartya-meta-gomb': 'kartya-meta-view'
 };
@@ -120,36 +280,40 @@ nezetGombok.forEach(btn => {
     });
 });
 
-async function betoltesFirebasebol() {
-    try {
-        const querySnapshot = await getDocs(collection(db, "karakterek"));
+function betoltesFirebasebol() {
+    onSnapshot(collection(db, "karakterek"), (querySnapshot) => {
         let adatok = [];
-        querySnapshot.forEach((doc) => {
-            adatok.push(doc.data());
+        querySnapshot.forEach((docSnap) => {
+            const raw = docSnap.data();
+            if (raw && raw.character) {
+                adatok.push(automatikusKarakterKiegeszites(raw));
+            }
         });
-        
+
+        adatok.sort((a, b) => String(a.character || '').localeCompare(String(b.character || '')));
+
         nyersKarakterAdatok = adatok;
         initGrid(nyersKarakterAdatok);
         initPvPMatchupEngine();
-    } catch (error) {
+        if (jelenlegiNezet === 'tier-list-gomb') renderTierList();
+        if (jelenlegiNezet === 'ctp-mod-gomb') frissitCtpEredmenyek();
+    }, (error) => {
         console.error("Kritikus hiba a Firebase adatok lekérésekor:", error);
-    }
+    });
 }
 
 // --- KŐKEMÉNY ZÁRT RENDSZER LOGIKA (ZSILIP) ---
-const TITKOS_KOD = "MAGYARMETA2026"; // Ezt a kódot add meg a klánnak!
+const TITKOS_KOD = "MAGYARMETA2026";
 
 const inviteWall = document.getElementById('invite-wall');
 const inviteInput = document.getElementById('invite-input');
 const inviteBtn = document.getElementById('invite-btn');
 const inviteError = document.getElementById('invite-error');
 
-// Ellenőrizzük, hogy bent van-e már a gépén a mentett belépés
 if (localStorage.getItem('mff_klan_auth') === 'engedelyezve') {
-    if (inviteWall) inviteWall.style.display = 'none'; // Eltüntetjük a falat, ha létezik
-    betoltesFirebasebol(); // CSAK EKKOR töltjük le az adatokat, spórolva a Firebase kvótával
+    if (inviteWall) inviteWall.style.display = 'none';
+    betoltesFirebasebol();
 } else {
-    // Ha nincs mentve, megvárjuk a gombnyomást
     if (inviteBtn) {
         inviteBtn.addEventListener('click', () => {
             if (inviteInput.value === TITKOS_KOD) {
@@ -162,8 +326,6 @@ if (localStorage.getItem('mff_klan_auth') === 'engedelyezve') {
             }
         });
     }
-    
-    // Enter gombra is működjön
     if (inviteInput) {
         inviteInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
@@ -172,46 +334,43 @@ if (localStorage.getItem('mff_klan_auth') === 'engedelyezve') {
         });
     }
 }
-// ----------------------------------------------
 
 function letrehozKarakterKartya(c) {
     const color = szinek[c.type] || '#fff';
     const letter = c.type ? c.type[0].toUpperCase() : '';
-    
+
     let rawUsage = (c.usage || '').toUpperCase();
-    let shortUsage = c.usage || '?'; 
+    let shortUsage = c.usage || '?';
     if (rawUsage.includes('HYBRID') || (rawUsage.includes('PVE') && rawUsage.includes('PVP'))) {
         shortUsage = 'PVE & PVP';
     } else if (rawUsage.includes('PVE')) {
         shortUsage = 'PVE';
     } else if (rawUsage.includes('PVP')) {
         shortUsage = 'PVP';
-    } else {
-        if (shortUsage.length > 15) {
-            shortUsage = shortUsage.substring(0, 12) + '...';
-        }
+    } else if (shortUsage.length > 15) {
+        shortUsage = shortUsage.substring(0, 12) + '...';
     }
 
     const typeIconName = c.type ? `icon_${c.type.toLowerCase()}.webp` : 'icon_unknown.webp';
     const alignIconName = c.alignment ? `icon_${c.alignment.toLowerCase().replace(/ /g, '_')}.webp` : 'icon_unknown.webp';
-    
+
     const kartya = document.createElement('div');
     kartya.className = 'karakter-kartya';
     kartya.style.setProperty('--type-color', color);
-    
+
     const benneVan = sajatRaktar.includes(c.character);
 
     kartya.innerHTML = `
         <div class="hatter-betu">${letter}</div>
         <button class="sajat-gomb ${benneVan ? 'megvan' : ''}" data-char="${c.character}" title="Hozzáadás / Törlés a saját raktárból">★</button>
-        <div class="portre-keret"><img src="${c.image_url || ''}" alt="${c.character}"></div>
+        <div class="portre-keret"><img src="images/portraits/${c.image_url}" onerror="if(this.src.endsWith('.webp')){this.src=this.src.replace('.webp','.png');}else{this.onerror=null;this.src='images/portraits/placeholder.webp';}" alt="${c.character}"></div>
         <h2>${c.character}</h2>
         <div class="badge-sor" style="margin-bottom: 8px;">
-            <span class="badge ${c.tier === 'T4' ? 'badge-t4' : 'badge-t3'}">${c.tier || 'T2'}</span>
-            <div class="badge-icon-text" style="border-color: ${color}; color: ${color};"><img src="${typeIconName}" class="meta-icon"> ${c.type || '?'}</div>
+            <span class="badge ${c.tier === 'T4' ? 'badge-t4' : 'badge-t3'}">${c.tier || 'T4'}</span>
+            <div class="badge-icon-text" style="border-color: ${color}; color: ${color};"><img src="images/icons/${typeIconName}" class="meta-icon"> ${c.type || '?'}</div>
         </div>
         <div class="badge-sor" style="margin-bottom: 15px;">
-            <div class="badge-icon-text" style="background:#2a3441; border-color:#8892b0;"><img src="${alignIconName}" class="meta-icon"> ${c.alignment || '?'}</div>
+            <div class="badge-icon-text" style="background:#2a3441; border-color:#8892b0;"><img src="images/icons/${alignIconName}" class="meta-icon"> ${c.alignment || '?'}</div>
             <span class="badge badge-usage" title="${c.usage || ''}">${shortUsage}</span>
         </div>
         <button class="reszletek-gomb">Adatlap megnyitása</button>
@@ -221,14 +380,14 @@ function letrehozKarakterKartya(c) {
         e.stopPropagation();
         const charName = this.getAttribute('data-char');
         if (sajatRaktar.includes(charName)) {
-            sajatRaktar = sajatRaktar.filter(n => n !== charName); 
+            sajatRaktar = sajatRaktar.filter(n => n !== charName);
             this.classList.remove('megvan');
         } else {
-            sajatRaktar.push(charName); 
+            sajatRaktar.push(charName);
             this.classList.add('megvan');
         }
-        localStorage.setItem('mff_raktar', JSON.stringify(sajatRaktar)); 
-        
+        localStorage.setItem('mff_raktar', JSON.stringify(sajatRaktar));
+
         if(document.getElementById('sajat-raktar-toggle').checked) {
             if (jelenlegiNezet === 'grid-mod-gomb') szuresEsMegjelenites();
             if (jelenlegiNezet === 'ctp-mod-gomb') frissitCtpEredmenyek();
@@ -251,7 +410,6 @@ function initGrid(adatok) {
 }
 
 function megnyitKarakterAdatlap(c, color) {
-    // 1. KŐKEMÉNY HIBAJAVÍTÁS: Görgetési pozíció elmentése univerzálisan
     utolsoScrollPozicio = window.scrollY;
 
     if (jelenlegiNezet === 'grid-mod-gomb') {
@@ -259,29 +417,37 @@ function megnyitKarakterAdatlap(c, color) {
     } else if (jelenlegiNezet === 'ctp-mod-gomb') {
         document.getElementById('ctp-szuro-view').classList.add('rejtett');
     }
-    
+
     document.getElementById('karakter-reszletek-view').classList.remove('rejtett');
-    window.scrollTo({ top: 0, behavior: 'auto' }); 
+    window.scrollTo({ top: 0, behavior: 'auto' });
 
     const tartalom = document.getElementById('reszletek-dinamikus-tartalom');
-    
+
     const urus = Array.isArray(c.equipment?.uru_setup) ? c.equipment.uru_setup.map(u => `<li>${formatMFFStats(u)}</li>`).join('') : '<li>Nincs adat</li>';
     const effectsList = Array.isArray(c.uniform_effect) && c.uniform_effect.length > 0 ? c.uniform_effect.map(e => `<li>${formatMFFStats(e)}</li>`).join('') : '<li>Nincs adat</li>';
     const leaderText = Array.isArray(c.recommended_teams?.leader) ? c.recommended_teams.leader.join(', ') : (c.recommended_teams?.leader || '-');
     const supportText = Array.isArray(c.recommended_teams?.supports) ? c.recommended_teams.supports.join(', ') : (c.recommended_teams?.supports || '-');
     const strategyText = c.matchup_engine?.counter_strategy || 'Nincs specifikus stratégia megadva.';
 
+    const uniformHTML = c.best_uniform
+        ? `<div class="reszlet-sor"><span class="reszlet-label">Legjobb Uniformis:</span> <span style="color: var(--mff-blast); font-weight: bold;">${c.best_uniform}</span></div>`
+        : '';
+
+    const synergyNotesHTML = Array.isArray(c.team_synergy_notes) && c.team_synergy_notes.length > 0
+        ? `<span class="reszlet-cim">Meta Elemzés & Csapat Szinergia</span><div style="font-size:13px; line-height:1.6; color:#b3b9c1; background:#12161c; padding:12px 15px; border-left:3px solid var(--mff-blast); border-radius:4px; margin-bottom:15px;">${c.team_synergy_notes.join('<br><br>')}</div>`
+        : '';
+
     let artifactHTML = '';
     if (c.own_artifact) {
-        const artImg = c.own_artifact.image || 'artifact_placeholder.webp';
+        const artImg = 'images/artifacts/' + (c.own_artifact.image || `artifact_${getAutoSlug(c.character)}.webp`);
         const artEff = Array.isArray(c.own_artifact.effect) ? c.own_artifact.effect.map(e => `<div>• ${formatMFFStats(e)}</div>`).join('') : `<div>• ${c.own_artifact.effect || 'Nincs adat'}</div>`;
-        artifactHTML = `<span class="reszlet-cim">Exkluzív Artifact</span><div style="display:flex; gap:12px; align-items:center; background:rgba(18,22,28,0.6); border:1px solid #2a3441; border-left:3px solid var(--mff-gold); padding:12px; margin-bottom:15px;"><img src="${artImg}" style="width:80px; height:80px; object-fit:contain;"> <div style="font-size:12px; line-height:1.4;">${artEff}</div></div>`;
+        artifactHTML = `<span class="reszlet-cim">Exkluzív Artifact</span><div style="display:flex; gap:12px; align-items:center; background:rgba(18,22,28,0.6); border:1px solid #2a3441; border-left:3px solid var(--mff-gold); padding:12px; margin-bottom:15px;"><img src="${artImg}" onerror="if(this.src.endsWith('.webp')){this.src=this.src.replace('.webp','.png');}else{this.onerror=null;this.src='images/artifacts/artifact_placeholder.webp';}" style="width:80px; height:80px; object-fit:contain;"> <div style="font-size:12px; line-height:1.4;">${artEff}</div></div>`;
     }
 
     let strikerHTML = '';
-    if (c.meta_striker && c.meta_striker !== "NINCS ADAT" && c.meta_striker !== "NINCS") {
+    if (c.meta_striker && c.meta_striker !== "NINCS ADAT" && c.meta_striker !== "NINCS" && c.meta_striker !== "-") {
         let strikerFajlNev = c.meta_striker.toLowerCase().replace(/ /g, '_');
-        strikerHTML = `<span class="reszlet-cim">Koreai Meta Striker</span><div style="display:flex; gap:12px; align-items:center; background:rgba(18,22,28,0.6); border:1px solid #2a3441; border-left:3px solid var(--mff-gold); padding:12px; margin-bottom:15px;"><img src="striker_${strikerFajlNev}.png" onerror="this.src='placeholder.webp'" alt="${c.meta_striker}" style="width:75px; height:75px; border-radius:50%; border:2px solid #555e70; box-shadow: 0 4px 8px rgba(0,0,0,0.5); object-fit:cover;"> <div style="font-size:12px; line-height:1.4;"><div style="font-weight:900; font-size:16px; color:#fff; text-transform:uppercase; margin-bottom:4px; letter-spacing: 1px;">${c.meta_striker}</div><div style="color:#8892b0;">• A koreai elit toplista alapján tesztelt meta választás.</div><div style="color:#8892b0;">• Garantálja a maximális Instinct statisztika bónuszt a képességekhez.</div></div></div>`;
+        strikerHTML = `<span class="reszlet-cim">Koreai Meta Striker</span><div style="display:flex; gap:12px; align-items:center; background:rgba(18,22,28,0.6); border:1px solid #2a3441; border-left:3px solid var(--mff-gold); padding:12px; margin-bottom:15px;"><img src="images/strikers/striker_${strikerFajlNev}.png" onerror="this.onerror=null; this.src='images/portraits/placeholder.webp';" alt="${c.meta_striker}" style="width:75px; height:75px; border-radius:50%; border:2px solid #555e70; box-shadow: 0 4px 8px rgba(0,0,0,0.5); object-fit:cover;"> <div style="font-size:12px; line-height:1.4;"><div style="font-weight:900; font-size:16px; color:#fff; text-transform:uppercase; margin-bottom:4px; letter-spacing: 1px;">${c.meta_striker}</div><div style="color:#8892b0;">• A koreai elit toplista alapján tesztelt meta választás.</div><div style="color:#8892b0;">• Garantálja a maximális Instinct statisztika bónuszt a képességekhez.</div></div></div>`;
     }
 
     let cancelsHTML = '';
@@ -293,7 +459,9 @@ function megnyitKarakterAdatlap(c, color) {
 
     let procHTML = '';
     if (c.proc_rotation) {
-        procHTML = `<span class="reszlet-cim">Makró Rotáció (Proc)</span><div class="proc-box"><div style="font-size:11px; color:#8892b0;">STANDARD</div><div class="proc-text">${c.proc_rotation.standard}</div>${c.proc_rotation.burst ? `<div style="font-size:11px; color:#8892b0; margin-top:10px;">BURST</div><div class="proc-text" style="color:var(--mff-t4);">${c.proc_rotation.burst}</div>` : ''}</div>`;
+        const stdRot = typeof c.proc_rotation === 'string' ? c.proc_rotation : (c.proc_rotation.standard || '-');
+        const burstRot = typeof c.proc_rotation === 'object' ? c.proc_rotation.burst : '';
+        procHTML = `<span class="reszlet-cim">Makró Rotáció (Proc)</span><div class="proc-box"><div style="font-size:11px; color:#8892b0;">STANDARD</div><div class="proc-text">${stdRot}</div>${burstRot ? `<div style="font-size:11px; color:#8892b0; margin-top:10px;">BURST</div><div class="proc-text" style="color:var(--mff-t4);">${burstRot}</div>` : ''}</div>`;
     } else if (c.gameplay) {
         procHTML = `<span class="reszlet-cim">Játékmenet (Rotáció)</span><div class="reszlet-sor"><span class="reszlet-label">Standard:</span> <span class="mff-highlight-yellow">${c.gameplay.standard_rotation || '-'}</span></div>${c.gameplay.burst_rotation ? `<div class="reszlet-sor" style="margin-top: 5px;"><span class="reszlet-label">T3/T4 Burst:</span> <span class="mff-highlight-red">${c.gameplay.burst_rotation}</span></div>` : ''}`;
     }
@@ -306,17 +474,17 @@ function megnyitKarakterAdatlap(c, color) {
 
     tartalom.innerHTML = `
         <div class="reszletek-bal" style="--type-color: ${color};">
-            <img src="${c.image_url || ''}" class="karakter-nagy-kep" alt="${c.character}">
+            <img src="images/portraits/${c.image_url}" onerror="if(this.src.endsWith('.webp')){this.src=this.src.replace('.webp','.png');}else{this.onerror=null;this.src='images/portraits/placeholder.webp';}" class="karakter-nagy-kep" alt="${c.character}">
             <div style="text-align:center; margin-top: 10px;">
                 <h2 style="font-size:28px; margin:0 0 10px 0; text-transform:uppercase; color:#fff; letter-spacing:1px;">${c.character}</h2>
                 <div class="badge-sor" style="justify-content:center;">
-                    <span class="badge ${c.tier === 'T4' ? 'badge-t4' : 'badge-t3'}">${c.tier || 'T2'}</span>
+                    <span class="badge ${c.tier === 'T4' ? 'badge-t4' : 'badge-t3'}">${c.tier || 'T4'}</span>
                     <span class="badge" style="background:#2a3441; color:#fff; border:1px solid ${color};">${c.type || '?'}</span>
                     <span class="badge" style="background:#12161c; color:#8892b0; border:1px solid #2a3441;">${c.usage || '?'}</span>
                 </div>
             </div>
         </div>
-        
+
         <div class="reszletek-jobb">
             <div class="mff-tabs-container">
                 <div class="mff-tabs">
@@ -327,15 +495,17 @@ function megnyitKarakterAdatlap(c, color) {
             </div>
 
             <div id="spa-tab-alap" class="mff-tab-content aktiv">
+                ${uniformHTML}
                 <div class="reszlet-sor"><span class="reszlet-label">Szerepkör:</span> <span class="mff-highlight-yellow">${c.role || '-'}</span></div>
                 <div class="reszlet-sor"><span class="reszlet-label">Legjobb Leader:</span> <span>${leaderText}</span></div>
                 <div class="reszlet-sor"><span class="reszlet-label">Ajánlott Supportok:</span> <span>${supportText}</span></div>
+                ${synergyNotesHTML}
                 ${artifactHTML}
                 ${strikerHTML}
                 <span class="reszlet-cim">Meta Felszerelés</span>
                 <div class="reszlet-sor"><span class="reszlet-label">Ajánlott CTP:</span></div>
                 ${formatCTPList(c.meta_ctp || c.equipment?.custom_gear)}
-                <div class="reszlet-sor" style="margin-top:10px;"><span class="reszlet-label">Ajánlott ISO-8:</span> <span class="mff-highlight-yellow">${c.equipment?.iso_8_set || 'Nincs adat'}</span></div>
+                <div class="reszlet-sor" style="margin-top:10px;"><span class="reszlet-label">Ajánlott ISO-8:</span> <span class="mff-highlight-yellow">${c.meta_iso || c.equipment?.iso_8_set || 'Power of Angry Hulk / Overdrive'}</span></div>
                 <span class="reszlet-cim">Uru Beállítás (Prioritás)</span>
                 <ul class="adat-lista">${urus}</ul>
             </div>
@@ -372,15 +542,14 @@ function megnyitKarakterAdatlap(c, color) {
 
 document.getElementById('vissza-a-gridbe-btn').addEventListener('click', () => {
     document.getElementById('karakter-reszletek-view').classList.add('rejtett');
-    
+
     if(jelenlegiNezet === 'grid-mod-gomb') {
         document.getElementById('karakter-grid').classList.remove('rejtett');
     } else if (jelenlegiNezet === 'ctp-mod-gomb') {
         document.getElementById('ctp-szuro-view').classList.remove('rejtett');
     }
-    
-    // 2. KŐKEMÉNY HIBAJAVÍTÁS: Közös visszaállítás az elmentett pozícióra
-    window.scrollTo({ top: utolsoScrollPozicio, behavior: 'instant' }); 
+
+    window.scrollTo({ top: utolsoScrollPozicio, behavior: 'instant' });
 });
 
 function szuresEsMegjelenites() {
@@ -396,13 +565,13 @@ function szuresEsMegjelenites() {
         const fajEgyezik = szurok.species === 'all' || ((c.species || '').toLowerCase() === szurok.species);
         const oldalEgyezik = szurok.alignment === 'all' || ((c.alignment || '').toLowerCase() === szurok.alignment);
         const szerepEgyezik = szurok.role === 'all' || ((c.role || '').toLowerCase().includes(szurok.role));
-        
+
         const sajatEgyezik = !csakSajat || sajatRaktar.includes(c.character);
 
-        if (keresoEgyezik && modEgyezik && tipusEgyezik && fajEgyezik && oldalEgyezik && szerepEgyezik && sajatEgyezik) { 
-            kartya.classList.remove('rejtett'); 
-        } else { 
-            kartya.classList.add('rejtett'); 
+        if (keresoEgyezik && modEgyezik && tipusEgyezik && fajEgyezik && oldalEgyezik && szerepEgyezik && sajatEgyezik) {
+            kartya.classList.remove('rejtett');
+        } else {
+            kartya.classList.add('rejtett');
         }
     });
 }
@@ -411,22 +580,22 @@ window.szuresEsMegjelenites = szuresEsMegjelenites;
 const keresoMezo = document.getElementById('kereso-mezo');
 const keresoTorlesGomb = document.getElementById('kereso-torles-gomb');
 
-keresoMezo.addEventListener('input', (e) => { 
-    szurok.search = e.target.value; 
+keresoMezo.addEventListener('input', (e) => {
+    szurok.search = e.target.value;
     if (e.target.value.length > 0) {
         keresoTorlesGomb.classList.remove('rejtett');
     } else {
         keresoTorlesGomb.classList.add('rejtett');
     }
-    szuresEsMegjelenites(); 
+    szuresEsMegjelenites();
 });
 
 keresoTorlesGomb.addEventListener('click', () => {
-    keresoMezo.value = ''; 
-    szurok.search = ''; 
-    keresoTorlesGomb.classList.add('rejtett'); 
-    szuresEsMegjelenites(); 
-    keresoMezo.focus(); 
+    keresoMezo.value = '';
+    szurok.search = '';
+    keresoTorlesGomb.classList.add('rejtett');
+    szuresEsMegjelenites();
+    keresoMezo.focus();
 });
 
 document.querySelectorAll('.filter-btn').forEach(btn => {
@@ -447,42 +616,50 @@ window.ugrasKarakterhez = function(nev) {
     document.getElementById('kereso-torles-gomb').classList.add('rejtett');
 
     document.getElementById('grid-mod-gomb').click();
-    szuresEsMegjelenites(); 
+    szuresEsMegjelenites();
 
     setTimeout(() => {
         const kartyak = document.querySelectorAll('#karakter-grid .karakter-kartya');
         for (let kartya of kartyak) {
             const h2 = kartya.querySelector('h2');
-            
+
             if (h2 && h2.textContent.trim().toLowerCase() === nev.toLowerCase()) {
                 kartya.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                
+
                 kartya.style.transition = 'box-shadow 0.3s ease, transform 0.3s ease';
                 kartya.style.transform = 'scale(1.03)';
                 kartya.style.boxShadow = '0 0 40px #fbc02d';
-                
-                setTimeout(() => { 
-                    kartya.style.boxShadow = 'none'; 
+
+                setTimeout(() => {
+                    kartya.style.boxShadow = 'none';
                     kartya.style.transform = 'scale(1)';
                 }, 2000);
-                
-                break; 
+
+                break;
             }
         }
-    }, 100); 
+    }, 100);
 };
 
 function frissitCtpEredmenyek() {
     const aktivGomb = document.querySelector('.ctp-kategoria-kartya.aktiv');
     if (!aktivGomb) return;
-    const ctpNev = aktivGomb.dataset.ctp;
-    
+    const ctpNev = aktivGomb.dataset.ctp.toUpperCase();
+
     const eredmenyKontener = document.getElementById('ctp-kereso-eredmenyek');
     eredmenyKontener.innerHTML = '';
-    
+
     const csakSajat = document.getElementById('sajat-raktar-toggle').checked;
 
-    let talalatok = nyersKarakterAdatok.filter(c => c.meta_ctp && c.meta_ctp.toUpperCase().includes(ctpNev));
+    let talalatok = nyersKarakterAdatok.filter(c => {
+        if (!c.meta_ctp) return false;
+        const m = c.meta_ctp.toUpperCase();
+        if (ctpNev === 'JUDGEMENT' || ctpNev === 'JUDGMENT') {
+            return m.includes('JUDGEMENT') || m.includes('JUDGMENT');
+        }
+        return m.includes(ctpNev);
+    });
+
     if (csakSajat) {
         talalatok = talalatok.filter(c => sajatRaktar.includes(c.character));
     }
@@ -527,7 +704,9 @@ function initPvPMatchupEngine() {
         const elem = document.createElement('div');
         elem.className = 'matchup-item-card';
         const sorszín = szinek[c.type] || '#fff';
-        const kepKep = c.image_url ? `<img src="${c.image_url}" style="width:32px; height:32px; border-radius:50%; object-fit:cover; border: 1px solid ${sorszín};">` : `<div style="width:32px; height:32px; border-radius:50%; background:#2a3441; border: 1px solid ${sorszín};"></div>`;
+
+        const kepKep = `<img src="images/portraits/${c.image_url}" onerror="if(this.src.endsWith('.webp')){this.src=this.src.replace('.webp','.png');}else{this.onerror=null;this.src='images/portraits/placeholder.webp';}" style="width:32px; height:32px; border-radius:50%; object-fit:cover; border: 1px solid ${sorszín};">`;
+
         elem.innerHTML = `<div style="display:flex; align-items:center; gap:12px;">${kepKep}<span>${c.character}</span></div><span style="width:10px; height:10px; background:${sorszín}; border-radius:50%;"></span>`;
         elem.addEventListener('click', () => {
             document.querySelectorAll('.matchup-item-card').forEach(i => i.classList.remove('active'));
@@ -545,12 +724,12 @@ function megjelenitMatchupRészleteket(karakter) {
     const supportArray = Array.isArray(supports) ? supports : supports.split(',');
     const supportChips = supportArray.filter(s => s && s.trim() !== '' && s !== 'N/A' && !s.toLowerCase().includes('saját maga') && s !== '""').map(s => `<span class="support-chip">${s.trim()}</span>`).join('');
     const taktikaHtml = karakter.matchup_engine?.counter_strategy ? `<div class="taktika-bubble"><strong style="color: #fff; text-transform: uppercase; font-size: 11px; letter-spacing: 1px;">Elemzés & Taktika:</strong><br><div style="margin-top: 5px; margin-bottom: 10px;">${karakter.matchup_engine.counter_strategy}</div>${supportChips ? `<strong style="color: var(--mff-blast); font-size: 10px; text-transform: uppercase;">Ajánlott Supportok:</strong><br>${supportChips}` : ''}</div>` : '';
-    
-    let strongHtml = taktikaHtml; 
+
+    let strongHtml = taktikaHtml;
     if (karakter.matchup_engine?.strong_against && karakter.matchup_engine.strong_against.length > 0 && karakter.matchup_engine.strong_against[0] !== "N/A" && karakter.matchup_engine.strong_against[0] !== "") {
         strongHtml += karakter.matchup_engine.strong_against.map(nev => {
             const kepUrl = getKarakterKep(nev);
-            const kepHtml = kepUrl ? `<img src="${kepUrl}" style="width:30px; height:30px; border-radius:50%; object-fit:cover; border: 1px solid var(--mff-speed);">` : `<div style="width:30px; height:30px; border-radius:50%; background:#2a3441; border: 1px solid #555e70;"></div>`;
+            const kepHtml = `<img src="images/portraits/${kepUrl}" onerror="if(this.src.endsWith('.webp')){this.src=this.src.replace('.webp','.png');}else{this.onerror=null;this.src='images/portraits/placeholder.webp';}" style="width:30px; height:30px; border-radius:50%; object-fit:cover; border: 1px solid var(--mff-speed);">`;
             return `<div class="matchup-item-card" style="border-left: 4px solid var(--mff-speed); cursor:default; justify-content:flex-start; gap:12px;">${kepHtml}<span>${nev}</span></div>`;
         }).join('');
     } else { strongHtml += '<p class="placeholder-text">Nincs regisztrált előnyös matchup.</p>'; }
@@ -559,7 +738,7 @@ function megjelenitMatchupRészleteket(karakter) {
     if (karakter.matchup_engine?.weak_against && karakter.matchup_engine.weak_against.length > 0 && karakter.matchup_engine.weak_against[0] !== "N/A" && karakter.matchup_engine.weak_against[0] !== "") {
         weakList.innerHTML = karakter.matchup_engine.weak_against.map(nev => {
             const kepUrl = getKarakterKep(nev);
-            const kepHtml = kepUrl ? `<img src="${kepUrl}" style="width:30px; height:30px; border-radius:50%; object-fit:cover; border: 1px solid var(--mff-t4);">` : `<div style="width:30px; height:30px; border-radius:50%; background:#2a3441; border: 1px solid #555e70;"></div>`;
+            const kepHtml = `<img src="images/portraits/${kepUrl}" onerror="if(this.src.endsWith('.webp')){this.src=this.src.replace('.webp','.png');}else{this.onerror=null;this.src='images/portraits/placeholder.webp';}" style="width:30px; height:30px; border-radius:50%; object-fit:cover; border: 1px solid var(--mff-t4);">`;
             return `<div class="matchup-item-card hard-counter" style="cursor:default; justify-content:flex-start; gap:12px;">${kepHtml}<span>${nev} <span style="font-size:10px; color:var(--mff-t4); margin-left:6px; font-weight:900;">[ KRITIKUS KONTRA ]</span></span></div>`;
         }).join('');
     } else { weakList.innerHTML = '<p class="placeholder-text">Nincs regisztrált kemény kontra.</p>'; }
@@ -567,7 +746,7 @@ function megjelenitMatchupRészleteket(karakter) {
 
 function renderTierList() {
     const container = document.getElementById('tier-list-view');
-    container.innerHTML = ''; 
+    container.innerHTML = '';
     const szintek = ['SS', 'S', 'A', 'B', 'UNRANKED'];
     const tierMap = { 'SS': [], 'S': [], 'A': [], 'B': [], 'UNRANKED': [] };
     nyersKarakterAdatok.forEach(c => {
@@ -583,7 +762,7 @@ function renderTierList() {
         let charHtml = tierMap[szint].map(c => {
             const borderSzín = szinek[c.type] || '#555e70';
             const safeName = (c.character || '').replace(/'/g, "\\'");
-            const kep = c.image_url ? `<img src="${c.image_url}" style="border-color:${borderSzín};">` : `<img src="placeholder.webp" style="border-color:${borderSzín};">`;
+            const kep = `<img src="images/portraits/${c.image_url}" onerror="if(this.src.endsWith('.webp')){this.src=this.src.replace('.webp','.png');}else{this.onerror=null;this.src='images/portraits/placeholder.webp';}" style="border-color:${borderSzín};">`;
             return `<div class="tier-mini-card" onclick="window.ugrasKarakterhez('${safeName}')">${kep}<span>${c.character}</span></div>`;
         }).join('');
         row.innerHTML = `<div class="tier-label ${cssClass}">${labelText}</div><div class="tier-content">${charHtml}</div>`;
@@ -619,7 +798,7 @@ function runAbSearch(selectId, resultsId, cancelMode) {
     const csakSajat = document.getElementById('sajat-raktar-toggle').checked;
 
     let talalatok = nyersKarakterAdatok.filter(c => {
-        if(!c.usage || !c.usage.toLowerCase().includes('pve')) return false; 
+        if(!c.usage || !c.usage.toLowerCase().includes('pve')) return false;
         if(csakSajat && !sajatRaktar.includes(c.character)) return false;
 
         const type = (c.type || '').toLowerCase();
@@ -660,9 +839,10 @@ function runAbSearch(selectId, resultsId, cancelMode) {
 
     talalatok.forEach(c => {
         const rawRole = (c.role || '').toLowerCase();
-        const isDps = rawRole.includes('dps');
-        const isLeader = rawRole.includes('leader');
-        const isSupport = rawRole.includes('support');
+        const tagsLower = (c.mechanics_tags || []).map(t => String(t).toLowerCase());
+        const isDps = rawRole.includes('dps') || (!rawRole.includes('leader') && !rawRole.includes('support'));
+        const isLeader = rawRole.includes('leader') || tagsLower.includes('leadership') || tagsLower.includes('leader');
+        const isSupport = rawRole.includes('support') || tagsLower.includes('support');
 
         let cancelsArr = [];
         if (cancelMode === 'ABX' && c.abx_cancels && c.abx_cancels.length > 0) {
@@ -675,10 +855,10 @@ function runAbSearch(selectId, resultsId, cancelMode) {
         const cardHtml = `
             <div class="ab-mini-card">
                 <div style="display:flex; align-items:center; gap:10px; border-bottom:1px solid #2a3441; padding-bottom:8px; margin-bottom:8px;">
-                    <img src="${c.image_url || 'placeholder.webp'}" style="width:40px; height:40px; border-radius:50%; border:1px solid #555e70; object-fit: cover;">
+                    <img src="images/portraits/${c.image_url}" onerror="if(this.src.endsWith('.webp')){this.src=this.src.replace('.webp','.png');}else{this.onerror=null;this.src='images/portraits/placeholder.webp';}" style="width:40px; height:40px; border-radius:50%; border:1px solid #555e70; object-fit: cover;">
                     <div>
                         <strong style="color:#fff; font-size:13px; text-transform:uppercase;">${c.character}</strong>
-                        <div style="font-size:10px; color:var(--mff-gold); font-weight:bold;">${c.tier || 'T3'}</div>
+                        <div style="font-size:10px; color:var(--mff-gold); font-weight:bold;">${c.tier || 'T4'}</div>
                     </div>
                 </div>
                 <div style="font-size: 10px; color: #8892b0; margin-bottom:4px; font-weight:bold;">Megszakítók:</div>
