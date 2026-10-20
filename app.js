@@ -175,7 +175,14 @@ drawerOverlay.addEventListener('click', csukSzurok);
 window.addEventListener('scroll', () => { felGomb.style.display = window.scrollY > 300 ? 'flex' : 'none'; });
 felGomb.addEventListener('click', () => { window.scrollTo({ top: 0, behavior: 'smooth' }); });
 
-function formatMFFStats(text) { if (!text) return ''; return String(text).replace(/([+-]?\d+(?:\.\d+)?%?)/g, '<span class="ertek-zold">$1</span>'); }
+function formatMFFStats(text) { 
+    if (!text) return ''; 
+    // 1. Kacsacsőrök HTML-kódolása, hogy a <Galactus> vagy hasonló szövegek ne törjék szét a weboldalt
+    let safeText = String(text).replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    
+    // 2. Számok és százalékok zöldítése
+    return safeText.replace(/([+-]?\d+(?:\.\d+)?%?)/g, '<span class="ertek-zold">$1</span>'); 
+}
 
 function getCTPIcon(ctpText) {
     if (!ctpText) return '';
